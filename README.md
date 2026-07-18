@@ -98,3 +98,25 @@ This project was built end-to-end, including working through real environment se
 ---
 
 *Inspired by the "IceStream" project brief from Axlero Solutions' Advanced Data Analytics curriculum.*
+
+
+
+
+Quick-start commands for your saved project (icestream-lakehouse-observability)
+Every time you want to run the old one again, just do these in order:
+powershell# 1. Go to the project folder
+cd D:\AXLERO\icestream-lakehouse-observability
+
+# 2. Start Kafka (Docker Desktop must be open first)
+docker compose up -d
+
+# 3. Activate your Python environment
+venv\Scripts\Activate.ps1
+
+# 4. Run whichever piece you want to demo, for example:
+python generate_orders.py
+Then in a second terminal (repeat steps 1 and 3 there too):
+powershelluvicorn live_server:app --reload
+Then open the browser to http://localhost:8000
+When you're done and want to shut it down cleanly
+powershelldocker compose down
