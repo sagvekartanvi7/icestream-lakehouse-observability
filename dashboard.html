@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>IceStream Live Dashboard</title>
+  <style>
+    body { font-family: sans-serif; background: #111; color: #eee; padding: 2rem; }
+    #status { padding: 1rem; border-radius: 8px; margin-bottom: 1rem; font-weight: bold; }
+    .healthy { background: #1a4d2e; }
+    .tripped { background: #4d1a1a; }
+    #feed { font-family: monospace; font-size: 13px; height: 300px; overflow-y: auto; background: #000; padding: 1rem; border-radius: 8px; }
+    .good { color: #7fd; }
+    .bad { color: #f77; }
+  </style>
+</head>
+<body>
+  <h2>IceStream Live Pipeline</h2>
+  <div id="status" class="healthy">Pipeline healthy</div>
+  <div id="feed"></div>
+
+  <script>
+    const ws = new WebSocket("ws://" + location.host + "/ws");
+    const status = document.getElementById("status");
+    const feed = document.getElementById("feed");
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      const line = document.createElement("div");
+      line.className = data.good ? "good" : "bad";
+      line.textContent = (data.good ? "GOOD " : "BAD  ") + data.order_id + " | error_rate=" + (data.error_rate * 100).toFixed(1) + "%";
+      feed.prepend(line);
+
+      status.textContent = data.tripped ? "CIRCUIT BREAKER TRIPPED" : "Pipeline healthy";
+      status.className = data.tripped ? "tripped" : "healthy";
+    };
+  </script>
+</body>
+</html>
