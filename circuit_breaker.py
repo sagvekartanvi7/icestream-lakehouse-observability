@@ -1,12 +1,17 @@
 from kafka import KafkaConsumer, KafkaProducer
 import json
 from collections import deque
+import csv
+import os
+from datetime import datetime
 
 SOURCE_TOPIC = "checkout-orders"
 DLQ_TOPIC = "checkout-orders-dlq"  # "Dead Letter Queue" - our quarantine lane
 
 ERROR_THRESHOLD = 0.02  # 2% - if error rate crosses this, we "trip the breaker"
 WINDOW_SIZE = 20        # look at the last 20 orders to calculate error rate
+
+INCIDENT_LOG_FILE = "incident_log.csv"
 
 consumer = KafkaConsumer(
     SOURCE_TOPIC,
@@ -28,6 +33,21 @@ breaker_tripped = False
 
 def check_order(order):
     return order["tax_amount"] is not None
+
+
+def log_incident(event_type, error_rate):
+    """Records a timestamped entry every time the breaker trips or resets."""
+    file_exists = os.path.exists(INCIDENT_LOG_FILE)
+    with open(INCIDENT_LOG_FILE, "a", newline="") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["timestamp", "event", "error_rate", "reason"])
+        reason = (
+            f"Error rate {error_rate:.1%} exceeded {ERROR_THRESHOLD:.0%} threshold"
+            if event_type == "TRIPPED"
+            else f"Error rate recovered to {error_rate:.1%}"
+        )
+        writer.writerow([datetime.now().isoformat(timespec="seconds"), event_type, f"{error_rate:.1%}", reason])
 
 
 if __name__ == "__main__":
@@ -54,6 +74,8 @@ if __name__ == "__main__":
             breaker_tripped = True
             print("\n🚨 CIRCUIT BREAKER TRIPPED! Error rate exceeded 2%.")
             print("   Pipeline paused conceptually — all bad data now quarantined in DLQ.\n")
+            log_incident("TRIPPED", error_rate)
         elif error_rate <= ERROR_THRESHOLD and breaker_tripped:
             breaker_tripped = False
             print("\n✅ Circuit breaker RESET. Error rate back to normal.\n")
+            log_incident("RESET", error_rate)

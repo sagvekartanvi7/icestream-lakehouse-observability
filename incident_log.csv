@@ -1,0 +1,2 @@
+timestamp,event,error_rate,reason
+2026-07-18T23:36:27,TRIPPED,5.0%,Error rate 5.0% exceeded 2% threshold
