@@ -1,37 +1,193 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>IceStream Live Dashboard</title>
-  <style>
-    body { font-family: sans-serif; background: #111; color: #eee; padding: 2rem; }
-    #status { padding: 1rem; border-radius: 8px; margin-bottom: 1rem; font-weight: bold; }
-    .healthy { background: #1a4d2e; }
-    .tripped { background: #4d1a1a; }
-    #feed { font-family: monospace; font-size: 13px; height: 300px; overflow-y: auto; background: #000; padding: 1rem; border-radius: 8px; }
-    .good { color: #7fd; }
-    .bad { color: #f77; }
-  </style>
+<meta charset="UTF-8">
+<title>IceStream Live Dashboard</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    margin: 0;
+    padding: 2.5rem;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  .subtitle {
+    color: #8b949e;
+    font-size: 14px;
+    margin: 0 0 2rem;
+  }
+
+  /* Pipeline flow row */
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 1.5rem;
+  }
+  .stage {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+    transition: background 0.3s, border-color 0.3s;
+  }
+  .stage .icon { font-size: 22px; margin-bottom: 6px; }
+  .stage .name { font-weight: 600; font-size: 14px; }
+  .stage .desc { font-size: 12px; color: #8b949e; margin-top: 2px; }
+
+  /* Status banner */
+  #status {
+    padding: 0.9rem 1.25rem;
+    border-radius: 10px;
+    margin-bottom: 1.5rem;
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.3s, color 0.3s;
+  }
+  #status .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .healthy { background: #0d2818; color: #56d364; border: 1px solid #1a4d2e; }
+  .healthy .dot { background: #56d364; }
+  .tripped { background: #2d1214; color: #ff7b72; border: 1px solid #4d1a1a; animation: pulse 1.5s infinite; }
+  .tripped .dot { background: #ff7b72; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+  /* Stat cards */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 1.5rem;
+  }
+  .stat-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 1rem;
+  }
+  .stat-label { font-size: 12px; color: #8b949e; }
+  .stat-value { font-size: 26px; font-weight: 600; margin-top: 4px; }
+  .stat-good { color: #56d364; }
+  .stat-bad { color: #ff7b72; }
+
+  /* Feed */
+  .feed-label { font-size: 13px; color: #8b949e; margin-bottom: 8px; }
+  #feed {
+    background: #0a0d12;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    height: 260px;
+    overflow-y: auto;
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 12.5px;
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  .row { padding: 3px 0; display: flex; gap: 10px; }
+  .badge { font-weight: 600; width: 46px; flex-shrink: 0; }
+  .good { color: #56d364; }
+  .bad { color: #ff7b72; }
+  .meta { color: #6e7681; }
+
+  #feed::-webkit-scrollbar { width: 8px; }
+  #feed::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+</style>
 </head>
 <body>
-  <h2>IceStream Live Pipeline</h2>
-  <div id="status" class="healthy">Pipeline healthy</div>
+
+  <h1>IceStream</h1>
+  <p class="subtitle">Real-time lakehouse observability pipeline</p>
+
+  <div class="pipeline">
+    <div class="stage"><div class="icon">&#128228;</div><div class="name">Producer</div><div class="desc">generate_orders.py</div></div>
+    <div class="stage"><div class="icon">&#128260;</div><div class="name">Kafka</div><div class="desc">checkout-orders</div></div>
+    <div class="stage"><div class="icon">&#128737;</div><div class="name">Watchman</div><div class="desc">circuit breaker</div></div>
+    <div class="stage" id="dlq-stage"><div class="icon">&#9888;</div><div class="name">DLQ</div><div class="desc">quarantine</div></div>
+  </div>
+
+  <div id="status" class="healthy">
+    <span class="dot"></span>
+    <span id="status-text">Pipeline healthy — circuit breaker closed</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-label">Total orders</div>
+      <div class="stat-value" id="stat-total">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Good</div>
+      <div class="stat-value stat-good" id="stat-good">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Quarantined</div>
+      <div class="stat-value stat-bad" id="stat-bad">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Error rate (last 20)</div>
+      <div class="stat-value" id="stat-rate">0%</div>
+    </div>
+  </div>
+
+  <div class="feed-label">Live order feed</div>
   <div id="feed"></div>
 
-  <script>
-    const ws = new WebSocket("ws://" + location.host + "/ws");
-    const status = document.getElementById("status");
-    const feed = document.getElementById("feed");
+<script>
+  const ws = new WebSocket("ws://" + location.host + "/ws");
+  const statusBox = document.getElementById("status");
+  const statusText = document.getElementById("status-text");
+  const feed = document.getElementById("feed");
+  const dlqStage = document.getElementById("dlq-stage");
 
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      const line = document.createElement("div");
-      line.className = data.good ? "good" : "bad";
-      line.textContent = (data.good ? "GOOD " : "BAD  ") + data.order_id + " | error_rate=" + (data.error_rate * 100).toFixed(1) + "%";
-      feed.prepend(line);
+  let total = 0, good = 0, bad = 0;
 
-      status.textContent = data.tripped ? "CIRCUIT BREAKER TRIPPED" : "Pipeline healthy";
-      status.className = data.tripped ? "tripped" : "healthy";
-    };
-  </script>
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    total++;
+    if (data.good) good++; else bad++;
+
+    document.getElementById("stat-total").textContent = total;
+    document.getElementById("stat-good").textContent = good;
+    document.getElementById("stat-bad").textContent = bad;
+    document.getElementById("stat-rate").textContent = (data.error_rate * 100).toFixed(1) + "%";
+
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML =
+      '<span class="badge ' + (data.good ? "good" : "bad") + '">' + (data.good ? "GOOD" : "BAD") + '</span>' +
+      '<span>' + data.order_id + '</span>' +
+      '<span class="meta">error_rate=' + (data.error_rate * 100).toFixed(1) + '%' + (data.good ? "" : " &rarr; sent to DLQ") + '</span>';
+    feed.prepend(row);
+    while (feed.children.length > 50) feed.removeChild(feed.lastChild);
+
+    if (data.tripped) {
+      statusBox.className = "tripped";
+      statusText.textContent = "Circuit breaker tripped — error rate " + (data.error_rate * 100).toFixed(1) + "% exceeds 2% threshold";
+      dlqStage.style.borderColor = "#4d1a1a";
+      dlqStage.style.background = "#2d1214";
+    } else {
+      statusBox.className = "healthy";
+      statusText.textContent = "Pipeline healthy — circuit breaker closed";
+      dlqStage.style.borderColor = "#30363d";
+      dlqStage.style.background = "#161b22";
+    }
+  };
+
+  ws.onclose = () => {
+    statusText.textContent = "Disconnected from server";
+    statusBox.className = "tripped";
+  };
+</script>
+
 </body>
 </html>
